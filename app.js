@@ -1,6 +1,7 @@
 const express = require("express");
 const ejs = require("ejs");
 const fileUpload = require("express-fileupload");
+const methodOverride = require("method-override"); // Fixed import
 const path = require("path");
 const fs = require("fs");
 const mongoose = require("mongoose");
@@ -19,6 +20,7 @@ app.use(express.static("public"));
 app.use(express.urlencoded({ extended: true }));
 app.use(express.json());
 app.use(fileUpload());
+app.use(methodOverride("_method"));
 
 const uploadDir = "public/uploads";
 if (!fs.existsSync(uploadDir)) {
@@ -38,6 +40,7 @@ app.get("/", async (req, res) => {
 app.get("/photos/:id", async (req, res) => {
   try {
     const photo = await Photo.findById(req.params.id);
+    if (!photo) return res.status(404).send("Photo not found.");
     res.render("photo", { photo });
   } catch (err) {
     console.error("Error loading photo page:", err);
@@ -56,7 +59,7 @@ app.get("/add", (req, res) => {
 app.post("/photos", async (req, res) => {
   try {
     if (!req.files || !req.files.image) {
-      return res.status(500).send("No file uploaded.");
+      return res.status(400).send("No file uploaded.");
     }
 
     let uploadedImage = req.files.image;
@@ -77,6 +80,43 @@ app.post("/photos", async (req, res) => {
     });
   } catch (err) {
     console.error("Error saving photo:", err);
+    res.status(500).send("Internal Server Error");
+  }
+});
+
+app.get("/photos/edit/:id", async (req, res) => {
+  try {
+    const photo = await Photo.findOne({ _id: req.params.id }); // Fixed findByOne
+    if (!photo) return res.status(404).send("Photo not found.");
+    res.render("edit", { photo });
+  } catch (err) {
+    console.error("Error loading photo edit page:", err);
+    res.status(500).send("Internal Server Error");
+  }
+});
+
+app.put("/photos/:id", async (req, res) => {
+  try {
+    const photo = await Photo.findById(req.params.id); // Fixed findOne → findById
+    if (!photo) return res.status(404).send("Photo not found.");
+
+    photo.title = req.body.title;
+    photo.description = req.body.description;
+    await photo.save();
+    res.redirect(`/photos/${req.params.id}`);
+  } catch (err) {
+    console.error("Error updating photo:", err);
+    res.status(500).send("Internal Server Error");
+  }
+});
+
+app.delete("/photos/:id", async (req, res) => {
+  try {
+    const photo = await Photo.findByIdAndDelete(req.params.id); // Fixed findByOne → findByIdAndDelete
+    if (!photo) return res.status(404).send("Photo not found.");
+    res.redirect("/");
+  } catch (err) {
+    console.error("Error deleting photo:", err);
     res.status(500).send("Internal Server Error");
   }
 });
