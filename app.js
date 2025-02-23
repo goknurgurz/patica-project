@@ -1,6 +1,8 @@
 const express = require("express");
 const ejs = require("ejs");
+const fileUpload = require("express-fileupload");
 const path = require("path");
+const fs = require("fs");
 const mongoose = require("mongoose");
 
 const Photo = require("./models/Photo");
@@ -16,6 +18,12 @@ app.set("view engine", "ejs");
 app.use(express.static("public"));
 app.use(express.urlencoded({ extended: true }));
 app.use(express.json());
+app.use(fileUpload());
+
+const uploadDir = "public/uploads";
+if (!fs.existsSync(uploadDir)) {
+  fs.mkdirSync(uploadDir);
+}
 
 app.get("/", async (req, res) => {
   try {
@@ -27,31 +35,49 @@ app.get("/", async (req, res) => {
   }
 });
 
-app.get("/about", (req, res) => {
+app.get("/photos/:id", async (req, res) => {
   try {
-    res.render("about");
+    const photo = await Photo.findById(req.params.id);
+    res.render("photo", { photo });
   } catch (err) {
-    console.error("Error loading about page:", err);
+    console.error("Error loading photo page:", err);
     res.status(500).send("Internal Server Error");
   }
 });
 
+app.get("/about", (req, res) => {
+  res.render("about");
+});
+
 app.get("/add", (req, res) => {
-  try {
-    res.render("add");
-  } catch (err) {
-    console.error("Error loading add page:", err);
-    res.status(500).send("Internal Server Error");
-  }
+  res.render("add");
 });
 
 app.post("/photos", async (req, res) => {
   try {
-    await Photo.create(req.body);
-    res.redirect("/");
+    if (!req.files || !req.files.image) {
+      return res.status(500).send("No file uploaded.");
+    }
+
+    let uploadedImage = req.files.image;
+    let uploadPath = path.join(__dirname, "public/uploads", uploadedImage.name);
+
+    uploadedImage.mv(uploadPath, async (err) => {
+      if (err) {
+        console.error("Error uploading file:", err);
+        return res.status(500).send("Error uploading file.");
+      }
+
+      await Photo.create({
+        ...req.body,
+        image: "/uploads/" + uploadedImage.name,
+      });
+
+      res.redirect("/");
+    });
   } catch (err) {
-    console.error("Error adding photo:", err);
-    res.status(500).send("Failed to add photo.");
+    console.error("Error saving photo:", err);
+    res.status(500).send("Internal Server Error");
   }
 });
 
